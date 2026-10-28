@@ -19,7 +19,7 @@ nt=calloc(m,sizeof(int));tl=calloc(m,sizeof(int));wh=malloc(sizeof(int)*m);un=ma
 #define TRUE(l) (a[abs(l)]==((l)>0))
 for(int i=0;i<m;i++){for(int j=0;j<K;j++){int l=cl[i*K+j];if(TRUE(l)){nt[i]++;tl[i]^=abs(l);}}if(!nt[i]){wh[i]=nu;un[nu++]=i;}}
 int best=nu;time_t t0=time(0);long fl=0;
-while(nu){ if((fl&0xfffff)==0){ if(time(0)-t0>T)break;}
+while(nu){ if((fl&0xfffff)==0){ static time_t lp=0; time_t nw=time(0); if(nw-t0>T)break; if(nw-lp>=20){lp=nw;fprintf(stderr,"t %ld nu %d best %d\n",(long)(nw-t0),nu,best);}}
  int ci=un[r()%nu];double sum=0,pr[K];int vs[K];
  for(int j=0;j<K;j++){int x=abs(cl[ci*K+j]);vs[j]=x;int lt=a[x]?2*x:2*x+1;int br=0;for(int o=occs[lt];o<occs[lt+1];o++)if(nt[occ[o]]==1)br++;pr[j]=pb[br<63?br:63];sum+=pr[j];}
  double rr=(r()%1000000)/1e6*sum;int j=0;for(;j<K-1;j++){rr-=pr[j];if(rr<=0)break;}

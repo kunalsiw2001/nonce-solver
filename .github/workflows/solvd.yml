@@ -8,14 +8,15 @@ permissions:
 jobs:
   req:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: request
         env: {TOK: "${{ secrets.SOLVD_TOKEN }}"}
         run: |
-          for i in $(seq 40); do
-            code=$(curl -s -m 20 -o ch.json -w "%{http_code}" -X POST https://api.solvd.fun/v3/challenge/request -H "authorization: Bearer $TOK" -H 'content-type: application/json' -d '{}')
+          set +e
+          for i in $(seq 400); do
+            code=$(curl -s -m 20 -o ch.json -w "%{http_code}" -X POST https://api.solvd.fun/v3/challenge/request -H "authorization: Bearer $TOK" -H 'content-type: application/json' -d '{}' || echo 000)
             echo "try $i $code $(head -c 200 ch.json)"
             grep -q '"boards"' ch.json && break
             sleep 4

@@ -1,0 +1,113 @@
+name: solvd
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {required: true}
+permissions:
+  contents: write
+jobs:
+  req:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: request
+        env: {TOK: "${{ secrets.SOLVD_TOKEN }}"}
+        run: |
+          for i in $(seq 40); do
+            code=$(curl -s -m 20 -o ch.json -w "%{http_code}" -X POST https://api.solvd.fun/v3/challenge/request -H "authorization: Bearer $TOK" -H 'content-type: application/json' -d '{}')
+            echo "try $i $code $(head -c 200 ch.json)"
+            grep -q '"boards"' ch.json && break
+            sleep 4
+          done
+          grep -q '"boards"' ch.json || { mkdir -p sol; cp ch.json sol/reqfail_${{ inputs.tag }}.json; }
+          [ -f ch.json ] && grep -q '"boards"' ch.json && cp ch.json solvd/ch_${{ inputs.tag }}.json
+          git config user.email a@b.c; git config user.name bot
+          git add -A solvd sol; git commit -qm req; for i in 1 2 3 4 5; do git pull -q --rebase origin main; git push -q origin HEAD:main && break; done
+          grep -q '"boards"' ch.json
+  solve:
+    needs: req
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [0,1,2,3]
+        solver: [maplechrono, cadical195]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - run: git pull -q origin main; pip install -q python-sat
+      - name: solve
+        run: |
+          python3 - <<'P'
+          import json,sys
+          sys.path.insert(0,'solvd')
+          from nono_sat import solve_board
+          ch=json.load(open('solvd/ch_${{ inputs.tag }}.json'))
+          if ${{ matrix.board }}>=len(ch['boards']): open('out.txt','w').write(''); sys.exit()
+          g=solve_board(ch['boards'][${{ matrix.board }}],'${{ matrix.solver }}')
+          open('out.txt','w').write("\n".join(g))
+          P
+      - name: push
+        run: |
+          [ -s out.txt ] || exit 0
+          git config user.email a@b.c; git config user.name bot
+          for i in 1 2 3 4 5 6; do
+            git pull -q --rebase origin main || true
+            mkdir -p sol; f=sol/nono_${{ inputs.tag }}_${{ matrix.board }}.txt
+            [ -f $f ] && exit 0
+            cp out.txt $f; git add $f; git commit -qm s && git push -q origin HEAD:main && exit 0
+            git reset -q --hard origin/main; sleep 2
+          done
+  submit:
+    needs: req
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: submit
+        env: {TOK: "${{ secrets.SOLVD_TOKEN }}"}
+        run: |
+          git pull -q origin main
+          python3 - <<'P'
+          import json,time,subprocess,os,urllib.request
+          tag='${{ inputs.tag }}'
+          ch=json.load(open(f'solvd/ch_{tag}.json')); n=len(ch['boards'])
+          def runs(l):
+              o=[];c=0
+              for x in l:
+                  if x=='1': c+=1
+                  elif c: o.append(c);c=0
+              if c: o.append(c)
+              return o
+          def ok(bd,g):
+              if len(g)!=bd['height'] or any(len(r)!=bd['width'] for r in g): return False
+              if any(runs(g[r])!=list(bd['rows'][r]) for r in range(bd['height'])): return False
+              return all(runs(''.join(g[r][c] for r in range(bd['height'])))==list(bd['cols'][c]) for c in range(bd['width']))
+          sol={}
+          while time.time()<ch['expiresAt']-15 and len(sol)<n:
+              subprocess.run('git pull -q origin main',shell=True)
+              for i in range(n):
+                  f=f'sol/nono_{tag}_{i}.txt'
+                  if i not in sol and os.path.exists(f):
+                      g=open(f).read().split()
+                      if ok(ch['boards'][i],g): sol[i]=g; print('verified',i,flush=True)
+                      else: print('BAD',i,flush=True)
+              time.sleep(3)
+          if len(sol)<n: print('timeout',len(sol)); raise SystemExit(1)
+          body=json.dumps({"challengeId":ch['challengeId'],"encoding":"bin","boards":[sol[i] for i in range(n)]}).encode()
+          for k in range(5):
+              r=urllib.request.Request('https://api.solvd.fun/v3/challenge/submit',data=body,headers={'authorization':'Bearer '+os.environ['TOK'],'content-type':'application/json','User-Agent':'curl/8'},method='POST')
+              try:
+                  with urllib.request.urlopen(r,timeout=25) as f: resp=f.read(); code=f.status
+              except urllib.error.HTTPError as e: resp=e.read(); code=e.code
+              except Exception as e: print('neterr',e); time.sleep(2); continue
+              print(code,resp[:300]); 
+              if code==409 and b'bad_timing' in resp: continue
+              break
+          open(f'sol/resp_{tag}.json','wb').write(resp)
+          P
+          git config user.email a@b.c; git config user.name bot
+          git add sol; git commit -qm r; for i in 1 2 3 4 5; do git pull -q --rebase origin main; git push -q origin HEAD:main && break; done

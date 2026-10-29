@@ -24,7 +24,7 @@ jobs:
           grep -q '"boards"' ch.json || { mkdir -p sol; cp ch.json sol/reqfail_${{ inputs.tag }}.json; }
           [ -f ch.json ] && grep -q '"boards"' ch.json && cp ch.json solvd/ch_${{ inputs.tag }}.json
           git config user.email a@b.c; git config user.name bot
-          git add -A solvd sol; git commit -qm req; for i in 1 2 3 4 5; do git pull -q --rebase origin main; git push -q origin HEAD:main && break; done
+          mkdir -p sol; touch sol/.keep; git add -A solvd sol; git commit -qm req; for i in 1 2 3 4 5; do git pull -q --rebase origin main; git push -q origin HEAD:main && break; done
           grep -q '"boards"' ch.json
   solve:
     needs: req

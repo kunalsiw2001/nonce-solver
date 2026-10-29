@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
     inputs:
       tag: {required: true}
+permissions:
+  contents: write
 jobs:
   solve:
     runs-on: ubuntu-latest
@@ -11,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [0,1,2,3]
-        solver: [cadical195, glucose4, maplechrono, lingeling, minisat22]
+        solver: [maplechrono, cadical195]
     steps:
       - uses: actions/checkout@v4
       - run: pip install -q python-sat

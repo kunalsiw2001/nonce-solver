@@ -1,0 +1,37 @@
+name: nono
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {required: true}
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [0,1,2,3]
+        solver: [cadical195, glucose4, maplechrono, lingeling, minisat22]
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q python-sat
+      - name: solve
+        run: |
+          python3 - <<'P'
+          import json,sys
+          sys.path.insert(0,'solvd')
+          from nono_sat import solve_board
+          ch=json.load(open('solvd/ch_${{ inputs.tag }}.json'))
+          g=solve_board(ch['boards'][${{ matrix.board }}],'${{ matrix.solver }}')
+          open('out.txt','w').write("\n".join(g))
+          P
+      - name: push
+        run: |
+          for i in 1 2 3 4 5; do
+            git config user.email a@b.c; git config user.name bot
+            git pull -q --rebase origin main || true
+            mkdir -p sol; f=sol/nono_${{ inputs.tag }}_${{ matrix.board }}.txt
+            [ -f $f ] && exit 0
+            cp out.txt $f; git add $f; git commit -qm s && git push -q origin HEAD:main && exit 0
+            sleep 2
+          done
